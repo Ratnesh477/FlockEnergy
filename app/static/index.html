@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Urja Meter Ops — Modern REST API Dashboard</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-content">
+        <div class="brand-section">
+          <div class="logo-icon">⚡</div>
+          <div>
+            <h1 class="brand-title">Urja Meter Ops · API Dashboard</h1>
+            <p class="brand-subtitle">Automated Proxy Layer, Network Hierarchy & Consumption Visualizer</p>
+          </div>
+        </div>
+        <div class="header-actions">
+          <div class="badge badge-live">
+            <span class="badge-pulse"></span>
+            <span id="portal-status-text">Connected to Urja Portal</span>
+          </div>
+          <button class="btn btn-secondary" id="btn-refresh-cache" title="Re-sync data from legacy portal">
+            🔄 Refresh Cache
+          </button>
+          <a href="/docs" target="_blank" class="btn btn-outline">
+            📖 OpenAPI Docs
+          </a>
+          <a href="/openapi.json" target="_blank" class="btn btn-outline">
+            { } openapi.json
+          </a>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- KPI Cards -->
+      <section class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-indicator blue"></div>
+          <span class="kpi-title">Total Smart Meters</span>
+          <span class="kpi-value" id="kpi-total-meters">—</span>
+          <span class="kpi-subtext" id="kpi-meters-sub">Jaipur Distribution Grid</span>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-indicator emerald"></div>
+          <span class="kpi-title">Active / Installed</span>
+          <span class="kpi-value" id="kpi-installed-meters">—</span>
+          <span class="kpi-subtext" id="kpi-installed-sub">Normal Operation</span>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-indicator amber"></div>
+          <span class="kpi-title">Faulty / Alert</span>
+          <span class="kpi-value" id="kpi-faulty-meters">—</span>
+          <span class="kpi-subtext">Requires Field Inspection</span>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-indicator cyan"></div>
+          <span class="kpi-title">Distribution Transformers</span>
+          <span class="kpi-value" id="kpi-total-dts">—</span>
+          <span class="kpi-subtext" id="kpi-dts-sub">Total Capacity: — kVA</span>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-indicator purple"></div>
+          <span class="kpi-title">Healed Legacy Anomalies</span>
+          <span class="kpi-value" id="kpi-healed-anomalies">—</span>
+          <span class="kpi-subtext">Automatically Repaired</span>
+        </div>
+      </section>
+
+      <!-- Tab Navigation -->
+      <nav class="tab-navigation">
+        <button class="tab-btn active" data-tab="tab-meters">Meter Explorer</button>
+        <button class="tab-btn" data-tab="tab-consumption">Consumption Visualizer</button>
+        <button class="tab-btn" data-tab="tab-hierarchy">Hierarchy Tree</button>
+        <button class="tab-btn" data-tab="tab-proximity">Spatial / Proximity Search</button>
+        <button class="tab-btn" data-tab="tab-transformers">Transformers</button>
+        <button class="tab-btn" data-tab="tab-anomalies">Protocol & Anomalies</button>
+      </nav>
+
+      <!-- TAB 1: METER EXPLORER -->
+      <section id="tab-meters" class="tab-panel active">
+        <div class="panel-card">
+          <div class="filter-bar">
+            <div class="search-input-wrapper">
+              <input type="text" id="meter-search-input" class="input-text" placeholder="Search by Meter ID (e.g. J100000) or Serial (e.g. SE33962)...">
+            </div>
+            <select id="filter-make" class="select-input">
+              <option value="">All Makes</option>
+              <option value="HPL">HPL</option>
+              <option value="Genus">Genus</option>
+              <option value="L&T">L&T</option>
+              <option value="Secure">Secure</option>
+              <option value="Allied">Allied</option>
+            </select>
+            <select id="filter-status" class="select-input">
+              <option value="">All Statuses</option>
+              <option value="Installed">Installed</option>
+              <option value="Faulty">Faulty</option>
+              <option value="Decommissioned">Decommissioned</option>
+            </select>
+            <select id="filter-phase" class="select-input">
+              <option value="">All Phases</option>
+              <option value="single">Single Phase</option>
+              <option value="three">Three Phase</option>
+            </select>
+            <select id="filter-build" class="select-input">
+              <option value="">All Builds</option>
+              <option value="legacy">Legacy Build</option>
+              <option value="v2">v2 Build</option>
+            </select>
+            <button class="btn btn-primary" id="btn-apply-filters">Filter</button>
+            <button class="btn btn-outline" id="btn-reset-filters">Reset</button>
+          </div>
+
+          <div class="table-responsive">
+            <table class="data-table" id="meters-table">
+              <thead>
+                <tr>
+                  <th>Meter ID</th>
+                  <th>Serial No</th>
+                  <th>Make</th>
+                  <th>Phase</th>
+                  <th>Status</th>
+                  <th>DT Code</th>
+                  <th>Build</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="meters-tbody">
+                <tr><td colspan="8" style="text-align:center; padding: 2rem;">Loading meters...</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="pagination-controls">
+            <button class="btn btn-secondary" id="btn-prev-page">← Previous</button>
+            <span id="pagination-text">Page 1 of 1</span>
+            <button class="btn btn-secondary" id="btn-next-page">Next →</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: CONSUMPTION VISUALIZER -->
+      <section id="tab-consumption" class="tab-panel">
+        <div class="panel-card">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; margin-bottom:1rem;">
+            <div>
+              <h2 style="font-size:1.1rem; font-weight:600;">30-Minute Interval Consumption Analytics</h2>
+              <p style="font-size:0.8rem; color:var(--text-secondary);">Historical active energy (kWh), apparent energy (kVAh), and R-phase voltage (V)</p>
+            </div>
+            <div style="display:flex; gap:0.5rem; align-items:center;">
+              <input type="text" id="consumption-meter-input" class="input-text" style="width:160px;" value="J100000" placeholder="Enter Meter ID">
+              <button class="btn btn-primary" id="btn-load-consumption">Load Consumption</button>
+            </div>
+          </div>
+
+          <!-- Consumption Summary Metrics -->
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:1rem; margin-bottom:1rem;">
+            <div style="background:var(--bg-card); padding:0.75rem 1rem; border-radius:0.5rem; border:1px solid var(--border-color);">
+              <span style="font-size:0.75rem; color:var(--text-secondary);">Net Energy Consumed</span>
+              <div style="font-size:1.35rem; font-weight:700; color:var(--accent-cyan);" id="cons-total-kwh">— kWh</div>
+            </div>
+            <div style="background:var(--bg-card); padding:0.75rem 1rem; border-radius:0.5rem; border:1px solid var(--border-color);">
+              <span style="font-size:0.75rem; color:var(--text-secondary);">Average Voltage</span>
+              <div style="font-size:1.35rem; font-weight:700; color:var(--accent-emerald);" id="cons-avg-v">— V</div>
+            </div>
+            <div style="background:var(--bg-card); padding:0.75rem 1rem; border-radius:0.5rem; border:1px solid var(--border-color);">
+              <span style="font-size:0.75rem; color:var(--text-secondary);">Voltage Range (Min - Max)</span>
+              <div style="font-size:1.35rem; font-weight:700; color:var(--accent-amber);" id="cons-range-v">— V</div>
+            </div>
+            <div style="background:var(--bg-card); padding:0.75rem 1rem; border-radius:0.5rem; border:1px solid var(--border-color);">
+              <span style="font-size:0.75rem; color:var(--text-secondary);">Recorded Intervals</span>
+              <div style="font-size:1.35rem; font-weight:700; color:var(--text-primary);" id="cons-readings-count">—</div>
+            </div>
+          </div>
+
+          <!-- Canvas Chart -->
+          <div class="chart-container">
+            <canvas id="consumption-canvas" width="1200" height="300"></canvas>
+          </div>
+
+          <!-- Readings Table (Sample) -->
+          <h3 style="font-size:0.9rem; font-weight:600; margin: 1rem 0 0.5rem 0;">Latest Readings Table</h3>
+          <div class="table-responsive" style="max-height: 240px;">
+            <table class="data-table" id="consumption-table">
+              <thead>
+                <tr>
+                  <th>Timestamp (ISO 8601)</th>
+                  <th>Raw Timestamp</th>
+                  <th>Active Energy (kWh)</th>
+                  <th>Apparent Energy (kVAh)</th>
+                  <th>R-Phase Voltage (V)</th>
+                </tr>
+              </thead>
+              <tbody id="consumption-tbody">
+                <tr><td colspan="5" style="text-align:center;">Click "Load Consumption" to view readings.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 3: HIERARCHY TREE -->
+      <section id="tab-hierarchy" class="tab-panel">
+        <div class="panel-card">
+          <div style="margin-bottom:1rem;">
+            <h2 style="font-size:1.1rem; font-weight:600;">Reconstructed 7-Tier Distribution Grid Hierarchy</h2>
+            <p style="font-size:0.8rem; color:var(--text-secondary);">
+              Reconstructed topology: Zone → Circle → Division → Subdivision → Substation → Feeder → Distribution Transformer (DT) → Meters.
+              Repaired legacy nodes are flagged with <span class="badge-healed">Healed</span> tags.
+            </p>
+          </div>
+          <div id="hierarchy-tree-container" style="background:var(--bg-card); padding:1rem; border-radius:0.5rem; border:1px solid var(--border-color); max-height:600px; overflow-y:auto;">
+            Loading network hierarchy tree...
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 4: SPATIAL / PROXIMITY SEARCH -->
+      <section id="tab-proximity" class="tab-panel">
+        <div class="panel-card">
+          <div style="margin-bottom:1rem;">
+            <h2 style="font-size:1.1rem; font-weight:600;">Geographic Proximity Query (Haversine Engine)</h2>
+            <p style="font-size:0.8rem; color:var(--text-secondary);">Answer questions the legacy portal cannot: "Which smart meters are located near this coordinate?"</p>
+          </div>
+
+          <div class="filter-bar">
+            <div>
+              <label style="font-size:0.75rem; color:var(--text-secondary); display:block;">Latitude</label>
+              <input type="number" step="0.0001" id="prox-lat" class="input-text" style="width:140px;" value="26.9124">
+            </div>
+            <div>
+              <label style="font-size:0.75rem; color:var(--text-secondary); display:block;">Longitude</label>
+              <input type="number" step="0.0001" id="prox-lng" class="input-text" style="width:140px;" value="75.7873">
+            </div>
+            <div>
+              <label style="font-size:0.75rem; color:var(--text-secondary); display:block;">Radius (km)</label>
+              <input type="number" step="0.5" id="prox-radius" class="input-text" style="width:100px;" value="5.0">
+            </div>
+            <div style="align-self:flex-end;">
+              <button class="btn btn-primary" id="btn-run-proximity">Find Nearby Meters</button>
+            </div>
+          </div>
+
+          <!-- Quick Presets -->
+          <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom:1rem;">
+            <span style="font-size:0.75rem; color:var(--text-secondary); align-self:center;">Presets (Jaipur):</span>
+            <button class="btn btn-outline" onclick="setProximityPreset(26.8524, 75.8052, 'Malviya Nagar')">Malviya Nagar</button>
+            <button class="btn btn-outline" onclick="setProximityPreset(26.8645, 75.7554, 'Mansarovar')">Mansarovar</button>
+            <button class="btn btn-outline" onclick="setProximityPreset(26.9288, 75.7892, 'Bani Park')">Bani Park</button>
+            <button class="btn btn-outline" onclick="setProximityPreset(26.9038, 75.7387, 'Vaishali')">Vaishali</button>
+          </div>
+
+          <div class="table-responsive">
+            <table class="data-table" id="proximity-table">
+              <thead>
+                <tr>
+                  <th>Meter ID</th>
+                  <th>Serial No</th>
+                  <th>Make</th>
+                  <th>Phase</th>
+                  <th>Status</th>
+                  <th>DT Code</th>
+                  <th>Distance (km)</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="proximity-tbody">
+                <tr><td colspan="8" style="text-align:center; padding:1.5rem;">Click "Find Nearby Meters" to calculate proximity.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 5: TRANSFORMERS -->
+      <section id="tab-transformers" class="tab-panel">
+        <div class="panel-card">
+          <div style="margin-bottom:1rem;">
+            <h2 style="font-size:1.1rem; font-weight:600;">Distribution Transformers (DTs)</h2>
+            <p style="font-size:0.8rem; color:var(--text-secondary);">40 active transformers with rated kVA capacities and attached smart meters.</p>
+          </div>
+          <div class="dt-grid" id="transformers-grid">
+            Loading transformers...
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 6: PROTOCOL & ANOMALIES INSPECTOR -->
+      <section id="tab-anomalies" class="tab-panel">
+        <div class="panel-card">
+          <h2 style="font-size:1.1rem; font-weight:600; margin-bottom:0.5rem;">Legacy Protocol Discovery & Anomaly Inspector</h2>
+          <p style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:1rem;">
+            During our reverse-engineering inspection of the Urja Meter Ops portal, we uncovered internal JSON endpoints, HMAC-SHA256 signature workflows, and 22 records with incomplete hierarchy nodes. Below is the live reconciliation report:
+          </p>
+
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:1rem; margin-bottom:1.5rem;">
+            <div style="background:var(--bg-card); padding:1rem; border-radius:0.5rem; border:1px solid var(--border-color);">
+              <h3 style="font-size:0.9rem; font-weight:600; color:var(--accent-cyan); margin-bottom:0.5rem;">🔐 Authentication & CSRF</h3>
+              <p style="font-size:0.8rem; color:var(--text-secondary);">
+                • <strong>Provider:</strong> Better-Auth with session cookie <code>__Secure-better-auth.session_token</code> (TTL: 3600s)<br>
+                • <strong>CSRF Policy:</strong> SvelteKit enforces matching <code>Origin</code> and <code>Referer</code> headers on form POSTs.<br>
+                • <strong>Auto-Reauth:</strong> Transparent re-authentication on 401 or 302 redirects to prevent client interruption.
+              </p>
+            </div>
+            <div style="background:var(--bg-card); padding:1rem; border-radius:0.5rem; border:1px solid var(--border-color);">
+              <h3 style="font-size:0.9rem; font-weight:600; color:var(--accent-emerald); margin-bottom:0.5rem;">⚡ Bulk Export & HMAC</h3>
+              <p style="font-size:0.8rem; color:var(--text-secondary);">
+                • <strong>Bulk Endpoint:</strong> <code>/portal/export?page=1</code> yields all 403 meters in a single call.<br>
+                • <strong>Signature:</strong> HMAC-SHA256 of <code>GET\n/portal/export\npage=1\n&lt;timestamp&gt;</code> using key from <code>/portal/keys</code>.<br>
+                • <strong>Headers:</strong> <code>x-timestamp</code> and <code>x-signature</code>.
+              </p>
+            </div>
+            <div style="background:var(--bg-card); padding:1rem; border-radius:0.5rem; border:1px solid var(--border-color);">
+              <h3 style="font-size:0.9rem; font-weight:600; color:var(--accent-purple); margin-bottom:0.5rem;">🧬 Data Polymorphism</h3>
+              <p style="font-size:0.8rem; color:var(--text-secondary);">
+                • <strong>Dual Builds:</strong> 238 <code>legacy</code> meters vs 165 <code>v2</code> meters.<br>
+                • <strong>Legacy detail:</strong> Array of <code>{parameterName, parameterValue}</code>.<br>
+                • <strong>v2 detail:</strong> Stringified JSON inside <code>classData.installed_meter</code>.<br>
+                • <strong>Dates:</strong> <code>DD/MM/YYYY HH:mm</code> normalized to ISO 8601 UTC+05:30.
+              </p>
+            </div>
+          </div>
+
+          <h3 style="font-size:0.95rem; font-weight:600; margin-bottom:0.5rem;">The 22 Legacy Hierarchy Anomalies & Healed Output</h3>
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Meter ID</th>
+                  <th>Anomaly Level</th>
+                  <th>Legacy Raw Value</th>
+                  <th>Reconciled / Healed Value</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="anomalies-tbody">
+                <tr><td colspan="5" style="text-align:center;">Loading anomalies...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Meter Detail Drawer Modal -->
+    <div class="modal-overlay" id="meter-modal">
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <div>
+            <h2 style="font-size:1.25rem; font-weight:700;" id="modal-meter-title">Meter Details</h2>
+            <p style="font-size:0.8rem; color:var(--text-secondary);" id="modal-meter-sub"></p>
+          </div>
+          <button class="close-btn" id="modal-close-btn">&times;</button>
+        </div>
+
+        <div style="margin-bottom:1rem;">
+          <h4 style="font-size:0.8rem; text-transform:uppercase; color:var(--text-secondary); margin-bottom:0.35rem;">7-Tier Hierarchy Path</h4>
+          <div id="modal-breadcrumbs" style="display:flex; flex-wrap:wrap; gap:0.4rem; font-size:0.8rem;"></div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:1rem; margin-bottom:1rem;">
+          <div style="background:var(--bg-card); padding:1rem; border-radius:0.5rem; border:1px solid var(--border-color);">
+            <h4 style="font-size:0.8rem; text-transform:uppercase; color:var(--text-secondary); margin-bottom:0.5rem;">Nameplate Specifications</h4>
+            <div id="modal-nameplate" style="font-size:0.85rem;"></div>
+          </div>
+          <div style="background:var(--bg-card); padding:1rem; border-radius:0.5rem; border:1px solid var(--border-color);">
+            <h4 style="font-size:0.8rem; text-transform:uppercase; color:var(--text-secondary); margin-bottom:0.5rem;">Location & GPS</h4>
+            <div id="modal-location" style="font-size:0.85rem;"></div>
+            <div style="margin-top:1rem;">
+              <button class="btn btn-primary" id="modal-view-consumption-btn">📈 Open Consumption Graph</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      Flock Energy Assignment · Urja Meter Ops API Service Wrapper · Built with Python & FastAPI
+    </footer>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
